@@ -52,6 +52,26 @@ Convolution modes
      - Coherent X-ray microscopy (XNH); removes structured 3D noise
        and ring artifacts.
 
+In a nutshell
+^^^^^^^^^^^^^
+
+**2.5D** treats the volume as a stack of 2D slices.  For each slice it stacks
+*N* adjacent slices as input channels to a 2D U-Net, giving the network limited
+depth context.  Training is fast and memory-efficient — the full volume is never
+loaded as a 3D array.
+
+**3D** processes true cubic sub-volumes through a fully volumetric U-Net,
+learning spatial structure simultaneously in all three directions.  This makes
+it better at removing noise that is correlated across slices (ring artifacts,
+structured 3D noise), but it requires loading the entire volume into CPU RAM
+and is substantially slower to train and infer.
+
+.. admonition:: Key trade-off
+
+   2.5D is fast and memory-efficient but treats depth as a second-class
+   dimension.  3D is spatially isotropic but requires significantly more RAM
+   and compute.
+
 2.5D mode
 ^^^^^^^^^
 

@@ -99,16 +99,23 @@ class TomoDataset3DTrain(Dataset):
 
         self.psz        = int(tp.get('psz_3d', tp.get('psz', 64)))
         self.n_patches  = int(tp.get('nb_patches_3d', 1000))
+        z_stride        = int(tp.get('z_stride', 1))
 
         recon_0 = dp['directory_to_reconstructions'] + '/' + dp['sub_recon_name0']
         recon_1 = dp['directory_to_reconstructions'] + '/' + dp['sub_recon_name1']
 
         log.info("3D train: loading split0 from %s" % recon_0)
         tiffs0 = tiffs.glob(recon_0)
+        if z_stride > 1:
+            tiffs0 = tiffs0[::z_stride]
+            log.info("3D train: z_stride=%d → %d slices (of %d total)" % (
+                z_stride, len(tiffs0), len(tiffs0) * z_stride))
         self.split0, mean0, std0 = tiffs.load_stack(tiffs0)
 
         log.info("3D train: loading split1 from %s" % recon_1)
         tiffs1 = tiffs.glob(recon_1)
+        if z_stride > 1:
+            tiffs1 = tiffs1[::z_stride]
         self.split1, mean1, std1 = tiffs.load_stack(tiffs1)
 
         self.split0 = ((self.split0 - mean0) / std0).astype(np.float32)

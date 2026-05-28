@@ -446,7 +446,7 @@ Reducing training slices with z_stride
 By default, all slices from the sub-reconstructions are loaded into RAM for
 training.  For large CT datasets, adjacent slices are highly correlated along Z,
 so using every slice is rarely necessary.  Set ``z_stride`` in the config to
-load only every Nth slice:
+load only every Nth slice.  This works in **both 2.5D and 3D modes**.
 
 .. code-block:: yaml
 
@@ -457,7 +457,7 @@ load only every Nth slice:
       lr: 0.001
       warmup: 2000
       maxep: 2000
-      z_stride: 5   # use every 5th slice — 5× less RAM and 5× faster epochs
+      z_stride: 5   # use every 5th slice — 5× less RAM and 5× faster load
 
 ``z_stride: 1`` (the default) loads every slice.  A value of 5 is a good
 starting point for brain-sized datasets (~2000 slices): it retains full
@@ -466,6 +466,40 @@ anatomical coverage while reducing load time and memory by ~5×.
 The ``warmup`` threshold is automatically divided by ``z_stride`` so that the
 number of warmup model updates stays proportional to the effective dataset size
 — no manual adjustment needed.
+
+.. admonition:: 3D mode — RAM impact
+
+   In 3D mode each DDP rank loads the **entire volume** independently, so RAM
+   scales as ``world_size × dataset_size``.  ``z_stride`` is especially
+   important here.  For a 1852-slice volume with two GPUs:
+
+   .. list-table::
+      :header-rows: 1
+      :widths: 15 20 25 20 20
+
+      * - z_stride
+        - Slices loaded
+        - RAM per rank
+        - Total (2 ranks)
+        - Load time
+      * - 1 (default)
+        - 1852
+        - ~430 GB
+        - ~860 GB
+        - ~14 min
+      * - 5
+        - 370
+        - ~86 GB
+        - ~172 GB
+        - ~3 min
+      * - 10
+        - 185
+        - ~43 GB
+        - ~86 GB
+        - ~90 s
+
+   The maximum useful ``z_stride`` is ``floor(D / psz_3d)`` — you must
+   load at least ``psz_3d`` slices to draw a cubic training patch.
 
 .. note::
 
@@ -534,6 +568,7 @@ both 2.5D and 3D fields so no manual editing is required):
       n_blocks_3d: 4    # U-Net encoder depth (matches SSD_3D reference)
       start_filts_3d: 56  # filter count of first encoder block
       mbsz: 4           # batch size — 3D patches are large; use 2–8 per GPU
+      z_stride: 10      # load every 10th slice — critical for large volumes
       lr: 0.001
       warmup: 2000
       maxep: 2000
@@ -553,6 +588,9 @@ Key differences from 2.5D config:
 * ``nb_patches_3d`` sets how many random cubic patches are sampled per epoch.
   17600 matches the SSD_3D reference; reduce for quick experiments or smaller
   volumes.
+* ``z_stride`` is especially important in 3D mode — each rank loads the full
+  volume independently, so RAM scales as ``world_size × dataset_size``.
+  Use ``z_stride: 10`` as a starting point for large volumes (>1000 slices).
 
 .. tip::
 

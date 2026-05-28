@@ -9,6 +9,7 @@ import os
 import time
 import shutil
 import yaml
+import datetime
 import numpy as np
 import torch
 from copy import deepcopy
@@ -44,14 +45,16 @@ def run(args):
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
 
+    # Use a 3-hour timeout to accommodate large dataset loading and normalization
+    _timeout = datetime.timedelta(hours=3)
     if torch.distributed.is_nccl_available():
-        torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size)
+        torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size, timeout=_timeout)
     else:
-        torch.distributed.init_process_group("gloo", rank=rank, world_size=world_size)
+        torch.distributed.init_process_group("gloo", rank=rank, world_size=world_size, timeout=_timeout)
 
     # create directory containing training results in the directory of the reconstructions
     path_to_reconstructions = params['dataset']['directory_to_reconstructions']
-    odir = path_to_reconstructions + '/' + 'TrainOutput'
+    odir = getattr(args, 'output_dir', None) or (path_to_reconstructions + '/TrainOutput')
     if rank == 0:
         if getattr(args, 'resume', False):
             if not os.path.isdir(odir):
@@ -99,8 +102,13 @@ def run(args):
     torch.distributed.barrier()
 
     train_sampler = DistributedSampler(dataset=ds_train, shuffle=True, drop_last=True)
+    # 3D datasets can be hundreds of GB; forked workers trigger copy-on-write on
+    # every random patch access, ballooning memory.  num_workers=0 avoids the
+    # fork entirely — the main thread reads patches directly from shared RAM.
+    _nw = 0 if mode == '3d' else 4
+    _pf = None if _nw == 0 else 2
     dl_train = DataLoader(dataset=ds_train, batch_size=params['train']['mbsz'], sampler=train_sampler,
-                          num_workers=4, drop_last=False, prefetch_factor=2, pin_memory=True)
+                          num_workers=_nw, drop_last=False, prefetch_factor=_pf, pin_memory=True)
 
     log.info("Loaded %d samples into CPU memory for training." % len(ds_train))
 
