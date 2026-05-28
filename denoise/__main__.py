@@ -238,6 +238,8 @@ def train(args):
             cmd.extend(['--finetune', args.finetune])
         if getattr(args, 'mode', None):
             cmd.extend(['--mode', args.mode])
+        if getattr(args, 'output_dir', None):
+            cmd.extend(['--output-dir', args.output_dir])
         log.info("Launching training via torchrun (%d GPU(s)) ..." % n_gpus)
         result = subprocess.run(cmd, env=env)
         sys.exit(result.returncode)
@@ -441,6 +443,13 @@ def main():
                 default=29500,
                 metavar='PORT',
                 help='torchrun rendezvous port (change when running multiple jobs on the same node)',
+            )
+            cmd_parser.add_argument(
+                '--output-dir',
+                type=str,
+                default=None,
+                metavar='DIR',
+                help='Override the default TrainOutput directory (default: <directory_to_reconstructions>/TrainOutput)',
             )
 
         elif cmd == 'slice':
